@@ -1,0 +1,159 @@
+### Data Wrangling and Tidying for 5R ###
+### This code takes the QAQC-ed data and integrates it into the same dataframe ###
+### AUTHOR: Ashley R. Smyth arsmyth@gmail.com ###
+### Last updated: 18 Aug 2016 ###
+
+
+##Load Required Packages
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(lme4)
+library(nlme)
+library(multcomp)
+library(lsmeans)
+library(stringr)
+library(tidyr)
+library(zoo)
+library(xts)
+
+setwd("/Users/ashley/Desktop/5R_Check")
+
+rm(list = ls())
+
+##Load in the data###
+sen1 <- readRDS("Process Data/2012-2014 complete sensor dataframe post visual QA.rds")
+ghg1 <- readRDS(file="Process Data/2012-2015 GHG metadata.rds")
+key <- readRDS ("Process Data/complete sensor labels.rds") #this is the key for the sensor data
+rates <- read.delim("Process Data/GHG flux rates post QAQC.txt")
+dat <- read.table("Process Data/post-construction chamber locations.txt",header=T,sep="\t")# this is the lat long locations for the plots
+rates.with.time<-readRDS(file = "Process Data/2012-2015 GHG flux rates.rds")
+
+dat<-select(dat, -X)
+
+#Add the lat and log values to the key
+key$lat <- dat[match(key$chamber,dat$chamber),"lat"]
+key$lon <- dat[match(key$chamber,dat$chamber),"lon"]
+
+#split the chamberdates col in rates into chamber and date
+rates<-separate(rates,col="chamberdates", c("CollectionDate", "chamber"), sep=-5 )
+rates<-separate(rates,col="chamber",c("Transect","Location"), sep=-3, remove = FALSE) #does not contain lat and long
+rates.time<-separate(rates.with.time,col="chamber",c("Transect","Location"), sep=-3, remove = FALSE)
+rates<-unite(rates,SiteID,c(Transect,Location))
+rates.time<-unite(rates.time,SiteID,c(Transect,Location),sep="_")
+ghg<-separate(ghg1,col="uid", c("CollectionDate", "chamber"), sep=-6)
+
+#Merge the lat long and the GHG data based on chamber number
+rates2<-merge(rates,dat,by="chamber",remove=TRUE) #does not include pre-construction
+rates3<-left_join(rates,dat,by="chamber",remove=TRUE)# this keeps NA and therefore included pre-construction
+rates3t<-left_join(rates.time,dat,by="chamber",remove=TRUE)# this keeps NA and therefore included pre-construction
+rates2t<-merge(rates.time,dat,by="chamber",remove=TRUE) #does not include pre-construction
+
+
+new_DF<-rates3[is.na(rates3$lat), ]
+unique(new_DF$chamber) #shows which chambers do not have lat/longs, these are the pre-construction chambers
+
+#gather will take collumns and put them into pairs 
+data<-gather(sen1, key="sens_name", value="reading", 10:81)
+df<-separate_(data,col="sens_name", c("SiteID", "Sensor"), sep=8)
+
+#df1<-separate_(df,col="Sensor", c("Metric", "Rep"), sep=2)
+##Need to create a col that is just the first 2 letters of Sensor
+
+df2<-spread_(df,"Sensor","reading") #this puts each rep for the sensors in their own column 
+
+##Gather works the best. You do have to check to makes sure you are pulling the correct columns. 
+gdf1<-gather(df2,"O2sensor","O2",(15:17),na.rm=TRUE)
+gdf2<-gather(gdf1,"Moistsensor","M",c(14:16),na.rm=TRUE)
+gdf3<-gather(gdf2,"Tsensor","T",c(14:16),na.rm=TRUE)
+
+sendata<-gdf3 ## this is the tidy version of the sensor data where each variable is is't own column and observation is its own row
+sendata<-mutate(sendata,roundtime=ymd_hms(DateTime)) # puts roundtime in the same format as other data frames.
+
+
+sendata1<-separate(sendata,col="SiteID", c("Transect", "Chamber", "Transect2"))
+sendata2<-unite(sendata1,SiteID,c(Transect,Chamber))
+sendata<-select(sendata2,-contains("sensor"))
+sendata<-select(sendata,-contains("Transect"))
+sendata<-rename(sendata,CollectionDate=Date)
+
+sendata<-mutate(sendata,CollectionDate=ymd(CollectionDate))
+rates.all<-mutate(rates,CollectionDate=ymd(CollectionDate)) #all rates
+rates.post<-mutate(rates2,CollectionDate=ymd(CollectionDate)) #only rates post construction 
+
+rates.all$baci <- ifelse(rates.all$CollectionDate>"2012-05-01","after","before")
+rates.post$baci <- ifelse(rates.post$CollectionDate>"2012-05-01","after","before")
+sendata$baci <- ifelse(sendata$CollectionDate>"2012-05-01","after","before")
+
+###Creating a Data Frame that has the habitat zones matched with the Chamber- From Terry###
+
+zones <- c("Upland","Transition","Upland","Transition","Upland","Transition","Upland","Transition","Transition",
+           "Transition","Transition","Transition","Upland","Transition","Upland","Upland","Upland","Transition",
+           "Upland","Transition","Transition","Upland","Upland","Upland","Subold","Subold","Subnew","Subnew","Subold","Subold","Subnew","Subnew",rep("crop",5))
+Transect <- c("S1","S1","T1","T1","T2","T2","T2","T3","T3","T3","T4","T4","T4","T5","T5","T5","U4","U4","U3","U3","U2","U2","U1","U1",
+              "S2","S2","S2","S2","S3","S3","S3","S3",rep("T5",5))
+Location <- c("J1","J2","J1","J2","J1","J2","J3","J1","J2","J3","J1","J2","J3","J1","J2","J3","J1","J2","J1","J2","J1","J2","J1","J2",
+              "J1","J2","J3","J4","J1","J2","J3","J4","L1","L2","L3","L4","L5")
+chamber <- as.character(paste(Transect,Location,sep="_"))
+habitatchamber <- data.frame(chamber=chamber,habitat=zones)
+
+rates.all$habitat <- habitatchamber[match(rates.all$SiteID,habitatchamber$chamber),"habitat"]
+rates.post$habitat <- habitatchamber[match(rates.post$SiteID,habitatchamber$chamber),"habitat"]
+sendata$habitat <- habitatchamber[match(sendata$SiteID,habitatchamber$chamber),"habitat"]
+
+
+rates.time<-merge(rates.time,dat,by="chamber",remove=TRUE)
+
+###Some more arranging and mutating### 
+sendata1<-sendata%>%separate(roundtime, c("Date", "Time"), sep=" ")
+rates.time<-rates.time%>%mutate(CollectionTime=ymd_hms(CollectionTime))%>%mutate(CollectionDate=ymd(CollectionDate))
+sendata<-mutate(sendata,CollectionTime=ymd_hms(roundtime))
+rates.time$CollectionTime<-round_date(rates.time$CollectionTime, "hour")
+rates.post<-arrange(rates.post,CollectionDate)
+rates.post<-mutate(rates.post,CollectionDate=ymd(CollectionDate))
+rates.post<-group_by(rates.post,SiteID)
+sendata<-sendata%>%arrange(CollectionDate)%>%mutate(CollectionDate=ymd(CollectionDate))
+sendata<-group_by(sendata,SiteID)
+
+
+
+###Merging the dataframes to have repeats of flux for every sensor reading and NA's when there are not flux data. Either of these two options work##
+m6<-merge(sendata,rates.post,by=c("CollectionDate","SiteID"),all.x=TRUE) 
+m5<-left_join(sendata,rates.post, by=c("SiteID","CollectionDate","baci","habitat"))
+
+
+###Merging the dataframes to have NA's except when the collection times match for the sensors and the fluxes. This removed all repeat cols 
+m7a<-left_join(sendata,rates.time,by=c("CollectionTime","SiteID","CollectionDate","baci","habitat")) 
+
+
+#Checks to see what it looks like on a day when both were collected
+df<-m7a[complete.cases(m7a),]
+
+saveRDS(m7a,file="Data/5R_rates.sen.time.post.rds") ##I think this is the file that I want to use 
+saveRDS(m5,file="Data/5R_rates.sen.post.rds") #this one uses the same flux data for each sensor reading
+
+m_good<-m7a ### This file is NA's unless the time matches
+m_1<-m5 ###this file has the same flux for every sensor reading on that day
+
+dat2<-m_1
+dat3<-m_good
+
+dat3%>%rename(Temp=T)%>%select(-lat)%>%select(-lon)
+dat3%>%select(-chamber)
+dat4<-separate(dat3,SiteID, c("Transect","Location"),sep="_",remove=FALSE)
+dat4<-select(dat4,-lat)
+dat4<-select(dat4,-lon)
+dat4<-select(dat4,-chamber)
+dat4<-select(dat4,-uid)
+
+dat5<-unite(dat4,chamber,c(Transect,Location),sep="", remove=FALSE)
+
+dat5<-unite(dat5,uid,c(CollectionDate,chamber), sep=" ", remove=FALSE)
+
+dat5<-separate(dat5,CollectionDate,c("year","month","day"), remove=FALSE)
+
+dat5<-unite(dat5,MonDay,c(month,day),sep="-",remove=FALSE)
+
+
+df5r<-dat5
+save(df5r, file="Data/5R_data2.Rdata") #this is the final dataframe to be used for all post-processing
