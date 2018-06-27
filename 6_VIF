@@ -1,0 +1,98 @@
+rm(list=ls())
+
+### Load in Data Made in Step 5 ####
+
+d.train_center<-readRDS("Data/5R_train_cen.RDS")%>%
+  select(-contains("_M"))
+
+d<-readRDS("Data/5R_all_predictors_cen.RDS") 
+
+d.train.dt<-select(d.train_center,site,dt)
+d.train<-left_join(d.train.dt,d, by=c("site","dt")) 
+
+d.val_center<-readRDS("Data/5R_val_cen.RDS")%>%
+  select(-contains("_M"))
+d.val.dt<-select(d.val_center,site,dt)
+d.val<-left_join(d.val.dt,d, by=c("site","dt")) 
+
+## How Many Fluxes?
+
+d.train<-readRDS("Data/5R_train_cen.RDS")%>%
+  select(-contains("_M"))
+
+d.original<-readRDS("Data/5r_all.RDS.RDS")%>%
+  ungroup()%>%
+  select(-contains("_M"))
+
+d.fluxes<-readRDS('Data/5R_for_model_cen.RDS')%>%
+  select(-contains("_M"))
+
+
+fluxes_used<-d.train%>%
+  group_by(site)%>%
+  summarize(count.used=n())
+
+fluxes_criteria<-d.fluxes%>% #or all fluxes
+  group_by(site)%>%
+  summarize(count.criteria=n())
+
+fluxes_have<-d.original%>%
+  group_by(site)%>%
+  filter(!is.na(lCH4))%>%
+  summarize(count.have=n())
+
+flux_measurements<-left_join(fluxes_have,fluxes_criteria, by="site")%>%
+  left_join(fluxes_used, by="site")
+
+write.table(flux_measurements, "flux_measurements.txt", sep="\t")
+
+###VIF for Variable Selection Based on Centered Data
+
+#Center the data around the mean of the sensor value
+#I'm using a different constant for each sensor and centering around the mean for the sensor readings for each site.Since the predators are multiplicative of the sensor I choose to subtract the mean for the sensor since we were interested in each sensor alone and in combination. 
+#All centering is is subrating a constant from the value of a predictor. 
+#I choose to use each site to reduce shrinkage. 
+
+library(fmsb)
+
+#Make a seperate data frame for each sensor
+d.train.center.in.df<-d.train_center%>%
+  ungroup()%>%
+  dplyr::select(contains("_"),O2, WFPS, Temp)%>%
+  dplyr::select(-contains("SiteID"))%>%
+  dplyr::select(-contains("std"))
+
+d.train.center.in.df.O2<-d.train_center%>%
+  ungroup()%>%
+  dplyr::select(contains("O2"))%>%
+  dplyr::select(-contains("std"))%>%
+  dplyr::select(-contains("CO2"))
+
+d.train.center.in.df.T<-d.train_center%>%
+  ungroup()%>%
+  dplyr::select(contains("_T"), Temp)%>%
+  dplyr::select(-contains("std"))%>%
+  dplyr::select(-contains("CO2"))
+
+d.train.center.in.df.W<-d.train_center%>%
+  ungroup()%>%
+  dplyr::select(contains("_W"), WFPS)%>%
+  dplyr::select(-contains("std"))%>%
+  dplyr::select(-contains("CO2"))
+
+
+#Ouput includes the predictors to use for additional model selection
+source("Scripts/vif_func.R")
+
+pred.vif.5.all<-vif_func(in_frame = d.train.center.in.df, thresh = 5, trace = TRUE)
+
+pred.vif.5.O2<-vif_func(in_frame = d.train.center.in.df.O2, thresh = 5, trace = TRUE)
+
+pred.vif.5.Temp<-vif_func(in_frame = d.train.center.in.df.T, thresh = 5, trace = TRUE)
+
+pred.vif.5.WFPS<-vif_func(in_frame = d.train.center.in.df.W, thresh = 5, trace = TRUE)
+
+model.names<-c("All", "O2", "Temp", "WFPS")
+pred.vif.5<-list(pred.vif.5.all,pred.vif.5.O2,pred.vif.5.Temp,pred.vif.5.WFPS)
+names(pred.vif.5)<-model.names
+saveRDS(pred.vif.5,"Data/VIF.5.predictors.list.RDS")
