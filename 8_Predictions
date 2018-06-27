@@ -1,0 +1,58 @@
+#Predictions at the inner most level (site) using the mixed effects model. 
+library(tidyverse)
+library(nlme)
+
+
+#load the best model for each gas using all the sensors
+d_all<-readRDS("Data/5r_all.RDS")
+
+CH4constant<-min(d_all$CH4rate, na.rm=TRUE)+0.001
+N2Oconstant<-min(d_all$N2Orate, na.rm=TRUE)+0.001
+
+d<-readRDS("Data/5R_train_cen.RDS")%>%
+  select(-contains("_M"))
+
+CH4.model<-readRDS("Data/best.CH4.model")
+N2O.model<-readRDS("Data/best.N2O.model")
+CH4.null<-update(CH4.model, ~1)
+N2O.null<-update(N2O.model, ~1)
+
+#Update the models 
+
+N2O.model<-update(N2O.model, method="REML")
+CH4.model<-update(CH4.model, method="REML")
+
+N2O.null<-update(N2O.null, method="REML")
+CH4.null<-update(CH4.null, method="REML")
+
+
+#Two Levels of Predictions
+#Predict on the validation data set, at the inner most level (level 1=site) and the outer most level (level 0=population)
+
+d.val_center<-readRDS("Data/5R_val_cen.RDS")%>%
+  select(-contains("_M"))
+
+newdata<-readRDS("Data/5R_val_cen.RDS")%>%
+  select(-contains("_M"))
+
+newdata.predictions<-d.val_center%>%
+  ungroup()%>%
+  dplyr::select(site,dt,lCH4,lN2O)%>%
+  group_by(site)%>%
+  arrange(site,dt)
+
+newdata.predictions$CH4_pred<-predict(CH4.model, newdata=newdata, level=1)
+newdata.predictions$N2O_pred<-predict(N2O.model, newdata=newdata, level=1)
+newdata.predictions$CH4_pred.null<-predict(CH4.null, newdata=newdata, level=1)
+newdata.predictions$N2O_pred.null<-predict(N2O.null, newdata=newdata, level=1)
+
+newdata.predictions$CH4_pred_pop<-predict(CH4.model, newdata=newdata, level=0)
+newdata.predictions$N2O_pred_pop<-predict(N2O.model, newdata=newdata, level=0)
+newdata.predictions$CH4_pred.null<-predict(CH4.null, newdata=newdata, level=0)
+newdata.predictions$N2O_pred.null<-predict(N2O.null, newdata=newdata, level=0)
+
+cor(newdata.predictions$lCH4,newdata.predictions$CH4_pred, method="s")
+
+prediction.df<-newdata.predictions%>%
+  mutate(diffCH4=CH4_pred-lCH4,
+         diffN2O=N2O_pred-lN2O)
