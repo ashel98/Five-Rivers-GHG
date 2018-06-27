@@ -6,5 +6,5 @@ d_lag<-d_lag_all
 d_all_rl<-inner_join(d_roll,d_lag)
 d.fluxes<-d_all_rl[complete.cases(d_all_rl),]
 
-saveRDS(d,file = "Data/5R_all_predictors_cen.RDS")
+saveRDS(d.fluxes,file = "Data/5R_all_predictors_cen.RDS")
 saveRDS(d_all_rl,file = "Data/5R_all_predictors_cen_all_times.RDS")
