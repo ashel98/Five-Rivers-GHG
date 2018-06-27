@@ -1,0 +1,174 @@
+###5R Mixed Effects Models- Building the Data Frame with Rolls using a 14day cut off ####
+### AUTHOR: Ashley R. Smyth arsmyth@gmail.com ####
+### Last updated: 31 March 2017 ####
+
+library(tidyverse) # load dplyr, ggplot2, etc.
+library(RcppRoll) 
+library(broom)
+library(reshape2)
+
+#### Load in the data ####
+### we will use the file with NA's for gasses (whole data set)
+d<-d_centered #This file is the combined dataframe and includes the NA's for when there isnt flux data to match the time of the sensor data 
+
+#### Roll Functions for Soil O2 Measurements ####
+
+###Building a Data Frame with all the Rolled Values as Columns ####
+
+all_times <- data.frame(dt = seq(min(d$dt), max(d$dt), by = "30 min"))
+
+x <- d %>%
+  group_by(site) %>%
+  do(all_times) # adds a data frame for each site value
+
+# the number of rows of data that were missing:
+nrow(x) - nrow(d)
+
+d2 <- left_join(x, d) # join in to fill in missing values, has all 30var incremants over the data period
+nrow(d2) - nrow(d)
+
+
+N <- 14*24*2 # 14var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_roll14 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(roll_mean14_T = roll_meanr(Temp, n = N, na.rm = na.rm),
+         roll_var14_T = roll_varr(Temp, n = N, na.rm = na.rm),
+         roll_std14_T = roll_sdr(Temp, n = N, na.rm = na.rm),
+         roll_min14_T = roll_minr(Temp, n = N, na.rm = na.rm),
+         roll_max14_T = roll_maxr(Temp, n = N, na.rm = na.rm), 
+         roll_med14_T=roll_medianr(Temp, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean14_O2 = roll_meanr(O2, n = N, na.rm = na.rm),
+         roll_var14_O2 = roll_varr(O2, n = N, na.rm = na.rm),
+         roll_std14_O2 = roll_sdr(O2, n = N, na.rm = na.rm),
+         roll_min14_O2 = roll_minr(O2, n = N, na.rm = na.rm),
+         roll_max14_O2 = roll_maxr(O2, n = N, na.rm = na.rm), 
+         roll_med14_O2=roll_medianr(O2, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean14_M = roll_meanr(Moist, n = N, na.rm = na.rm),
+         roll_var14_M = roll_varr(Moist, n = N, na.rm = na.rm),
+         roll_std14_M = roll_sdr(Moist, n = N, na.rm = na.rm),
+         roll_min14_M = roll_minr(Moist, n = N, na.rm = na.rm),
+         roll_max14_M = roll_maxr(Moist, n = N, na.rm = na.rm), 
+         roll_med14_M=roll_medianr(Moist, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean14_W = roll_meanr(WFPS, n = N, na.rm = na.rm),
+         roll_var14_W = roll_varr(WFPS, n = N, na.rm = na.rm),
+         roll_std14_W = roll_sdr(WFPS, n = N, na.rm = na.rm),
+         roll_min14_W = roll_minr(WFPS, n = N, na.rm = na.rm),
+         roll_max14_W = roll_maxr(WFPS, n = N, na.rm = na.rm), 
+         roll_med14_W=roll_medianr(WFPS, n=N, na.rm=na.rm))
+
+N <- 7*24*2 # 7var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_roll7 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(roll_mean7_T = roll_meanr(Temp, n = N, na.rm = na.rm),
+         roll_var7_T = roll_varr(Temp, n = N, na.rm = na.rm),
+         roll_std7_T = roll_sdr(Temp, n = N, na.rm = na.rm),
+         roll_min7_T = roll_minr(Temp, n = N, na.rm = na.rm),
+         roll_max7_T = roll_maxr(Temp, n = N, na.rm = na.rm), 
+         roll_med7_T=roll_medianr(Temp, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean7_O2 = roll_meanr(O2, n = N, na.rm = na.rm),
+         roll_var7_O2 = roll_varr(O2, n = N, na.rm = na.rm),
+         roll_std7_O2 = roll_sdr(O2, n = N, na.rm = na.rm),
+         roll_min7_O2 = roll_minr(O2, n = N, na.rm = na.rm),
+         roll_max7_O2 = roll_maxr(O2, n = N, na.rm = na.rm), 
+         roll_med7_O2=roll_medianr(O2, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean7_M = roll_meanr(Moist, n = N, na.rm = na.rm),
+         roll_var7_M = roll_varr(Moist, n = N, na.rm = na.rm),
+         roll_std7_M = roll_sdr(Moist, n = N, na.rm = na.rm),
+         roll_min7_M = roll_minr(Moist, n = N, na.rm = na.rm),
+         roll_max7_M = roll_maxr(Moist, n = N, na.rm = na.rm), 
+         roll_med7_M=roll_medianr(Moist, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean7_W = roll_meanr(WFPS, n = N, na.rm = na.rm),
+         roll_var7_W = roll_varr(WFPS, n = N, na.rm = na.rm),
+         roll_std7_W = roll_sdr(WFPS, n = N, na.rm = na.rm),
+         roll_min7_W = roll_minr(WFPS, n = N, na.rm = na.rm),
+         roll_max7_W = roll_maxr(WFPS, n = N, na.rm = na.rm), 
+         roll_med7_W=roll_medianr(WFPS, n=N, na.rm=na.rm))
+
+N <- 3*24*2 # 3var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_roll3 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(roll_mean3_T = roll_meanr(Temp, n = N, na.rm = na.rm),
+         roll_var3_T = roll_varr(Temp, n = N, na.rm = na.rm),
+         roll_std3_T = roll_sdr(Temp, n = N, na.rm = na.rm),
+         roll_min3_T = roll_minr(Temp, n = N, na.rm = na.rm),
+         roll_max3_T = roll_maxr(Temp, n = N, na.rm = na.rm), 
+         roll_med3_T=roll_medianr(Temp, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean3_O2 = roll_meanr(O2, n = N, na.rm = na.rm),
+         roll_var3_O2 = roll_varr(O2, n = N, na.rm = na.rm),
+         roll_std3_O2 = roll_sdr(O2, n = N, na.rm = na.rm),
+         roll_min3_O2 = roll_minr(O2, n = N, na.rm = na.rm),
+         roll_max3_O2 = roll_maxr(O2, n = N, na.rm = na.rm), 
+         roll_med3_O2=roll_medianr(O2, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean3_M = roll_meanr(Moist, n = N, na.rm = na.rm),
+         roll_var3_M = roll_varr(Moist, n = N, na.rm = na.rm),
+         roll_std3_M = roll_sdr(Moist, n = N, na.rm = na.rm),
+         roll_min3_M = roll_minr(Moist, n = N, na.rm = na.rm),
+         roll_max3_M = roll_maxr(Moist, n = N, na.rm = na.rm), 
+         roll_med3_M=roll_medianr(Moist, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean3_W = roll_meanr(WFPS, n = N, na.rm = na.rm),
+         roll_var3_W = roll_varr(WFPS, n = N, na.rm = na.rm),
+         roll_std3_W = roll_sdr(WFPS, n = N, na.rm = na.rm),
+         roll_min3_W = roll_minr(WFPS, n = N, na.rm = na.rm),
+         roll_max3_W = roll_maxr(WFPS, n = N, na.rm = na.rm), 
+         roll_med3_W=roll_medianr(WFPS, n=N, na.rm=na.rm))
+
+
+N <- 1*24*2 # 1var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_roll1 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(roll_mean1_T = roll_meanr(Temp, n = N, na.rm = na.rm),
+         roll_var1_T = roll_varr(Temp, n = N, na.rm = na.rm),
+         roll_std1_T = roll_sdr(Temp, n = N, na.rm = na.rm),
+         roll_min1_T = roll_minr(Temp, n = N, na.rm = na.rm),
+         roll_max1_T = roll_maxr(Temp, n = N, na.rm = na.rm), 
+         roll_med1_T=roll_medianr(Temp, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean1_O2 = roll_meanr(O2, n = N, na.rm = na.rm),
+         roll_var1_O2 = roll_varr(O2, n = N, na.rm = na.rm),
+         roll_std1_O2 = roll_sdr(O2, n = N, na.rm = na.rm),
+         roll_min1_O2 = roll_minr(O2, n = N, na.rm = na.rm),
+         roll_max1_O2 = roll_maxr(O2, n = N, na.rm = na.rm), 
+         roll_med1_O2=roll_medianr(O2, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean1_M = roll_meanr(Moist, n = N, na.rm = na.rm),
+         roll_var1_M = roll_varr(Moist, n = N, na.rm = na.rm),
+         roll_std1_M = roll_sdr(Moist, n = N, na.rm = na.rm),
+         roll_min1_M = roll_minr(Moist, n = N, na.rm = na.rm),
+         roll_max1_M = roll_maxr(Moist, n = N, na.rm = na.rm), 
+         roll_med1_M=roll_medianr(Moist, n=N, na.rm=na.rm))%>%
+  mutate(roll_mean1_W = roll_meanr(WFPS, n = N, na.rm = na.rm),
+         roll_var1_W = roll_varr(WFPS, n = N, na.rm = na.rm),
+         roll_std1_W = roll_sdr(WFPS, n = N, na.rm = na.rm),
+         roll_min1_W = roll_minr(WFPS, n = N, na.rm = na.rm),
+         roll_max1_W = roll_maxr(WFPS, n = N, na.rm = na.rm), 
+         roll_med1_W=roll_medianr(WFPS, n=N, na.rm=na.rm))
+
+t.1d<-inner_join(d2,d_roll1)
+t.3d<-inner_join(t.1d,d_roll3)
+t.7d<-inner_join(t.3d,d_roll7)
+t.14d<-inner_join(t.7d,d_roll14)
+
+d_roll_all<-t.14d
+d_roll_cc<-d_roll_all[complete.cases(d_roll_all), ]
+
+#how many points do we have per site? 
+d_cases<-d_roll_cc%>%
+  group_by(site)%>%
+  summarize(count=n())
+
+saveRDS(d_roll_cc, file="Data/roll_cc_14d_centered")
+saveRDS(d_roll_all, file="Data/roll_all_14d_centered")
