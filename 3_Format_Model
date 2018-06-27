@@ -1,0 +1,28 @@
+load("Data/5R_data.Rdata") #dont need to do this if just made dataframe above.
+d<-df5r
+
+d_all<-d%>%
+  dplyr::select(SiteID,DateTime,chamber,O2,T,M,CH4rate,N2Orate) %>%
+  mutate(dt=ymd_hms(DateTime))%>%
+  rename (site=chamber) %>%
+  arrange(site, dt) %>%
+  group_by(site,dt) %>%
+  rename(Temp=T) %>% 
+  rename(Moist=M) %>%
+  as_data_frame()%>%
+  #log transform gasses for a normal distribution
+  mutate(lCH4=log(CH4rate-min(CH4rate, na.rm=TRUE)+0.001)) %>%
+  mutate(lN2O=log(N2Orate-min(N2Orate, na.rm=TRUE)+0.001)) %>%
+  group_by(site)%>%
+  mutate('99%'=quantile(Moist, probs=0.99))%>%
+  mutate(WFPS=Moist/quantile(Moist, probs=0.99))%>%
+  filter(site!="S1J1")
+#mutate(ltemp=log(Temp-min(Temp)+0.001)), #decided not to log transform temp because it can be negative. The benefit to log transforming it is that you can say for every % increase in temp, there is a % increase in flux but I don't think that matters for the model. 
+d_cc<-d_all[complete.cases(d_all),]
+
+saveRDS(d_all,"Data/5r_all.RDS") #all data
+saveRDS(d_cc,"Data/5r_cc.RDS") #only the complete cases
+
+#Values to add back to to untransfrom fluxes
+CH4constant<-min(d_all$CH4rate, na.rm=TRUE)+0.001
+N2Oconstant<-min(d_all$N2Orate, na.rm=TRUE)+0.001
