@@ -1,0 +1,130 @@
+#Predictions at the inner most level (site) using the mixed effects model with the validation data
+library(tidyverse)
+library(nlme)
+
+
+#load the best model for each gas using all the sensors
+d_all<-readRDS("Data/5r_all.RDS")
+d.train_center<-readRDS("Data/5R_train_cen.RDS")
+d.val_center<-readRDS("Data/5R_val_cen.RDS")
+
+CH4constant<-min(d_all$CH4rate, na.rm=TRUE)+0.001
+N2Oconstant<-min(d_all$N2Orate, na.rm=TRUE)+0.001
+
+CH4.model<-readRDS("best.CH4.model")
+N2O.model<-readRDS("best.N2O.model")
+CH4.null<-update(CH4.model, ~1)
+N2O.null<-update(N2O.model, ~1)
+
+CH4.model<-update(CH4.model,method="REML")
+N2O.model<-update(N2O.model,method="REML")
+
+#Two Levels of Predictions
+#Predict on the validation data set, at the inner most level (level 1=site) and the outer most level (level 0=population)
+
+d.val_center<-readRDS("Data/5R_val_cen.RDS")%>%
+  select(-contains("_M"))
+
+newdata<-readRDS("Data/5R_val_cen.RDS")%>%
+  select(-contains("_M"))
+
+newdata.predictions<-d.val_center%>%
+  ungroup()%>%
+  dplyr::select(site,dt,lCH4,lN2O)%>%
+  group_by(site)%>%
+  arrange(site,dt)
+
+newdata.predictions$CH4_pred<-predict(CH4.model, newdata=newdata, level=1)
+newdata.predictions$N2O_pred<-predict(N2O.model, newdata=newdata, level=1)
+newdata.predictions$CH4_pred.null<-predict(CH4.null, newdata=newdata, level=1)
+newdata.predictions$N2O_pred.null<-predict(N2O.null, newdata=newdata, level=1)
+
+newdata.predictions$CH4_pred_pop<-predict(CH4.model, newdata=newdata, level=0)
+newdata.predictions$N2O_pred_pop<-predict(N2O.model, newdata=newdata, level=0)
+newdata.predictions$CH4_pred.null<-predict(CH4.null, newdata=newdata, level=0)
+newdata.predictions$N2O_pred.null<-predict(N2O.null, newdata=newdata, level=0)
+
+cor(newdata.predictions$lCH4,newdata.predictions$CH4_pred, method="s")
+
+prediction.df<-newdata.predictions%>%
+  mutate(diffCH4=CH4_pred-lCH4,
+         diffN2O=N2O_pred-lN2O)
+   
+   
+#RMSE between predicted values on the training set and the validation set
+
+newdata<-d.train_center%>%
+  select(site,dt,lCH4,lN2O)
+
+newdata$lCH4rate.train<-predict(CH4.model, newdata=d.train_center, level=1)
+newdata$lN2Orate.train<-predict(N2O.model, newdata=d.train_center, level=1)
+
+cor(newdata$lN2O,newdata$lN2Orate.train, method = "spearman")
+cor(newdata$lCH4,newdata$lCH4rate.train, method = "spearman")
+
+rmse.train.site<-newdata%>%
+  group_by(site)%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.train=(exp(lCH4rate.train)+CH4constant),
+  N2Orate=exp(lN2O)+N2Oconstant,N2Orate.train=exp(lN2Orate.train)+N2Oconstant)%>%
+  mutate(error.model.CH4=(CH4rate.train-CH4rate)^2,
+         error.model.N2O=(N2Orate.train-N2Orate)^2)%>%
+  summarise(rmse.train.CH4=sqrt(mean(error.model.CH4, na.rm=T)),
+               rmse.train.N2O=sqrt(mean(error.model.N2O, na.rm=T)))
+
+rmse.train<-newdata%>%
+  ungroup()%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.train=(exp(lCH4rate.train)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.train=exp(lN2Orate.train)+N2Oconstant)%>%
+  mutate(error.model.CH4=(CH4rate.train-CH4rate)^2,
+         error.model.N2O=(N2Orate.train-N2Orate)^2)%>%
+  summarise(rmse.train.CH4=sqrt(mean(error.model.CH4, na.rm=T)),
+            rmse.train.N2O=sqrt(mean(error.model.N2O, na.rm=T)))
+
+
+
+mean.train.site<-newdata%>%
+  group_by(site)%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.train=(exp(lCH4rate.train)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.train=exp(lN2Orate.train)+N2Oconstant)%>%
+  summarize_at(vars(CH4rate.train:N2Orate.train),mean, na.rm=T)
+
+mean.train<-newdata%>%
+  ungroup()%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.train=(exp(lCH4rate.train)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.train=exp(lN2Orate.train)+N2Oconstant)%>%
+  summarize_at(vars(CH4rate:N2Orate.train),mean, na.rm=T)
+
+### Using the validation/training data set
+newdata2<-d.val_center%>%
+  group_by(site)%>%
+  select(site,dt,lCH4,lN2O)
+
+newdata2$lCH4rate.val<-predict(CH4.model, newdata=d.val_center, level=1)
+newdata2$lN2Orate.val<-predict(N2O.model, newdata=d.val_center, level=1)
+
+cor(newdata2$lN2O,newdata2$lN2Orate.val, method = "spearman")
+cor(newdata2$lCH4,newdata2$lCH4rate.val, method = "spearman")
+
+rmse.val.site<-newdata2%>%
+  group_by(site)%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.val=(exp(lCH4rate.val)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.val=exp(lN2Orate.val)+N2Oconstant)%>%
+  mutate(error.model.CH4=(CH4rate.val-CH4rate)^2,
+         error.model.N2O=(N2Orate.val-N2Orate)^2)%>%
+  summarise(rmse.val.CH4=sqrt(mean(error.model.CH4, na.rm=T)),
+            rmse.val.N2O=sqrt(mean(error.model.N2O, na.rm=T)))
+
+rmse.val<-newdata2%>%
+  ungroup()%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.train=(exp(lCH4rate.val)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.train=exp(lN2Orate.val)+N2Oconstant)%>%
+  mutate(error.model.CH4=(CH4rate.train-CH4rate)^2,
+         error.model.N2O=(N2Orate.train-N2Orate)^2)%>%
+  summarise(rmse.val.CH4=sqrt(mean(error.model.CH4, na.rm=T)),
+            rmse.val.N2O=sqrt(mean(error.model.N2O, na.rm=T)))
+
+mean.val<-newdata2%>%
+  group_by(site)%>%
+  mutate(CH4rate=(exp(lCH4)+CH4constant), CH4rate.val=(exp(lCH4rate.val)+CH4constant),
+         N2Orate=exp(lN2O)+N2Oconstant,N2Orate.val=exp(lN2Orate.val)+N2Oconstant)%>%
+  summarize_at(vars(CH4rate.val:N2Orate.val),mean, na.rm=T)
