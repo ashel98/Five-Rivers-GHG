@@ -1,4 +1,4 @@
-#Predictions at the inner most level (site) using the mixed effects model. 
+#Predictions at the inner most level (site) using the mixed effects model with the validation data
 library(tidyverse)
 library(nlme)
 
