@@ -26,3 +26,21 @@ saveRDS(d_cc,"Data/5r_cc.RDS") #only the complete cases
 #Values to add back to to untransfrom fluxes
 CH4constant<-min(d_all$CH4rate, na.rm=TRUE)+0.001
 N2Oconstant<-min(d_all$N2Orate, na.rm=TRUE)+0.001
+
+
+###Format Data and Prep for Model Selection###
+
+#Ste 1: Select Neccessary Variables
+d<-d_all%>%
+  group_by(site,DateTime)%>%
+  select(DateTime,site,O2,Temp,Moist,CH4rate,N2Orate,lCH4,lN2O,WFPS)
+
+
+#Step 2: Center the Data
+d_centered<-d%>%
+  ungroup()%>%
+  mutate(WFPS=WFPS-mean(WFPS, na.rm=TRUE),
+         O2=O2-mean(O2, na.rm=TRUE),
+         Temp=Temp-mean(Temp, na.rm=TRUE),
+        Moist=Moist-mean(Moist, na.rm=TRUE))%>%
+  group_by(site)
