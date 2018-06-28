@@ -1,0 +1,19 @@
+#Step 5: Select Data for the training and validation data set
+#randomly select 70% of each site to build the model
+#Note: each time this randomly selects and will be slighlty differnet from origional models. 
+dm<-d%>%
+  group_by(site)%>%
+  sample_frac(0.7)
+
+dval<-anti_join(d,dm)  #data frame with data that wasn't used to build the model. Saved for validation. 
+
+#Data used to for the models
+d.all_predictors<-d_all_rl #combined data table
+d.fluxes<-d.fluxes#This is all the times when flux data and sensor data match up
+d.train<- dm
+d.val<-dval
+
+saveRDS(d.all_predictors,file = "Data/5R_all_predictors_cen.RDS")
+saveRDS(d.fluxes,file = "Data/5R_for_model_cen.RDS")
+saveRDS(d.train,file = "Data/5R_train_cen.RDS")
+saveRDS(d.val,file = "Data/5R_val_cen.RDS")

@@ -1,0 +1,95 @@
+###5R Mixed Effects Models- Building the Data Frame with Lags- 14d Cut Off ####
+### AUTHOR: Ashley R. Smyth arsmyth@gmail.com ####
+### Last updated: 13 Feb 2017 ####
+
+#load required packages
+library(tidyverse) # load dplyr, ggplot2, etc.
+library(broom)
+library(reshape2)
+
+#### Load in the data ####
+### we will use the file with NA's for gasses (whole data set)
+d<-d_centered #This file is the combined dataframe and includes the NA's for when there isnt flux data to match the time of the sensor data 
+
+
+#### Lead for Soil Sensor Measurements ####
+
+###Building a Data Frame with all the Lead Values as Columns ####
+
+all_times <- data.frame(dt = seq(min(d$dt), max(d$dt), by = "30 min"))
+
+x <- d %>%
+  group_by(site) %>%
+  do(all_times) # adds a data frame for each site value
+
+# the number of rows of data that were missing:
+nrow(x) - nrow(d)
+
+d2 <- left_join(x, d) # join in to fill in missing values, has all 30var incremants over the data period
+nrow(d2) - nrow(d)
+
+#Creating Lagged Data
+
+#14Days
+N <- 14*24*2 # 14var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_lag14 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(lag14_T = lag(Temp, n = N, na.rm = na.rm))%>%
+  mutate(lag14_O2= lag(O2, n = N, na.rm = na.rm))%>%
+  mutate(lag14_M= lag(Moist, n = N, na.rm = na.rm))%>%
+  mutate(lag14_W= lag(WFPS, n = N, na.rm = na.rm))
+
+# 7Days
+N <- 7*24*2 # 7var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_lag7 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(lag7_T = lag(Temp, n = N, na.rm = na.rm))%>%
+  mutate(lag7_O2= lag(O2, n = N, na.rm = na.rm))%>%
+  mutate(lag7_M= lag(Moist, n = N, na.rm = na.rm))%>%
+  mutate(lag7_W= lag(WFPS, n = N, na.rm = na.rm))
+
+#3Days
+N <- 3*24*2 # 7var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_lag3 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(lag3_T = lag(Temp, n = N, na.rm = na.rm))%>%
+  mutate(lag3_O2= lag(O2, n = N, na.rm = na.rm))%>%
+  mutate(lag3_M= lag(Moist, n = N, na.rm = na.rm))%>%
+  mutate(lag3_W= lag(WFPS, n = N, na.rm = na.rm))
+
+#1Days
+N <- 1*24*2 # 7var increments to roll over
+na.rm <- FALSE # if FALSE, then a NA will be returned if there are any missing measurements
+
+d_lag1 <- d2 %>%
+  rename(site = site) %>% #change this if want to look at a differnt sensor
+  arrange(site, dt) %>%
+  group_by(site) %>%
+  mutate(lag1_T = lag(Temp, n = N, na.rm = na.rm))%>%
+  mutate(lag1_O2= lag(O2, n = N, na.rm = na.rm))%>%
+  mutate(lag1_M= lag(Moist, n = N, na.rm = na.rm))%>%
+  mutate(lag1_W= lag(WFPS, n = N, na.rm = na.rm))
+
+
+t.1d<-inner_join(d2,d_lag1)
+t.3d<-inner_join(t.1d,d_lag3)
+t.7d<-inner_join(t.3d,d_lag7)
+t.14d<-inner_join(t.7d,d_lag14)
+
+d_lag_all<-t.14d
+d_lag_cc<-d_lag_all[complete.cases(d_lag_all), ]
+
+saveRDS(d_lag_cc, file="Data/lag_cc_14d_centered")
+saveRDS(d_lag_all, file="Data/lag_all_14d_centered")

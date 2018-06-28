@@ -1,0 +1,182 @@
+#Model selection for CH4
+library(nlme)
+
+d<-readRDS("Data/5R_train_cen.RDS")%>%
+  select(-contains("_M"))
+
+vifs<-readRDS("Data/VIF.5.predictors.list.RDS")
+
+m_null_CH4<-lme(lCH4~1, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Point/Discrete Measurements
+m_point_all_CH4<-lme(lCH4~O2+WFPS+Temp, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_O2_CH4<-lme(lCH4~O2, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_WFPS_CH4<-lme(lCH4~WFPS, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_Temp_CH4<-lme(lCH4~Temp, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Continuous Data- All Variables with VIF less than 5. 
+
+pred.all<-paste(vifs$All, sep = " ", collapse ="+")
+pred.O2<-paste(vifs$O2, sep = " ", collapse ="+")
+pred.W<-paste(vifs$WFPS, sep = " ", collapse ="+")
+pred.Temp<-paste(vifs$Temp, sep = " ", collapse ="+")
+
+m_O2_CH4<-lme(formula(paste("lCH4","~",pred.O2)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_Temp_CH4<-lme(formula(paste("lCH4","~",pred.Temp)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_WFPS_CH4<-lme(formula(paste("lCH4","~",pred.W)),random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_all_CH4<-lme(formula(paste("lCH4","~",pred.all)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Stepwise Model Selection
+m_O2_CH4_step<-MASS::stepAIC(m_O2_CH4, trace = FALSE)
+m_WFPS_CH4_step<-MASS::stepAIC(m_WFPS_CH4, trace = FALSE)
+m_Temp_CH4_step<-MASS::stepAIC(m_Temp_CH4, trace = FALSE)
+m_all_CH4_step<-MASS::stepAIC(m_all_CH4, trace = FALSE)
+
+m_CH4_best<-list(m_O2_CH4_step,m_WFPS_CH4_step,m_Temp_CH4_step,m_all_CH4_step)
+model.names<-c( "O2", "WFPS", "Temp", "All")
+names(m_CH4_best)<-model.names
+saveRDS(m_CH4_best,"best.model.list.CH4")
+saveRDS(m_all_CH4_step, "best.CH4.model")
+
+#Compare Sensor Models to Point Measurements
+anova(m_point_O2_CH4,m_O2_CH4_step,m_null_CH4)
+anova(m_Temp_CH4_step,m_point_Temp_CH4,m_null_CH4)
+anova(m_WFPS_CH4_step,m_point_WFPS_CH4,m_null_CH4)
+anova(m_point_all_CH4,m_all_CH4_step,m_null_CH4)
+anova(m_all_CH4_step,m_O2_CH4_step)
+
+
+CH4.model.list.O2<-list(m_null_CH4,m_O2_CH4_step,m_point_O2_CH4)
+CH4.model.list.WFPS<-list(m_null_CH4,m_WFPS_CH4_step,m_point_WFPS_CH4)
+CH4.model.list.Temp<-list(m_null_CH4,m_Temp_CH4_step,m_point_Temp_CH4)
+CH4.model.list.all<-list(m_null_CH4,m_all_CH4_step,m_point_all_CH4)
+
+
+#Compare Models
+CH4.model.best<-readRDS("Data/best.CH4.model")
+
+
+piecewiseSEM::rsquared(CH4.model.list.O2)
+piecewiseSEM::rsquared(CH4.model.list.WFPS)
+piecewiseSEM::rsquared(CH4.model.list.Temp)
+piecewiseSEM::rsquared(CH4.model.list.all)
+
+# Drop terms to determine importance and contribution to variance explained
+CH4.best.model<-readRDS('best.model.list.CH4')
+
+CH4.drop.list<-list(CH4.best.model$All, 
+                    update(CH4.best.model$All,.~.-roll_var14_W),
+                    update(CH4.best.model$All,.~.-roll_var1_O2),
+                    update(CH4.best.model$All,.~.-roll_var7_O2),
+                    update(CH4.best.model$All,.~.-roll_var14_O2),
+                    update(CH4.best.model$All,.~.-lag14_T),
+                    update(CH4.best.model$All,.~.-lag14_O2),
+                    update(CH4.best.model$All,.~.-WFPS),
+                    update(CH4.best.model$All,.~.-O2))
+
+piecewiseSEM::rsquared(CH4.drop.list)
+
+CH4.drop.list.O2<-list(CH4.best.model$O2, 
+                       update(CH4.best.model$O2,.~.-roll_var1_O2),
+                       update(CH4.best.model$O2,.~.-roll_var7_O2),
+                       update(CH4.best.model$O2,.~.-roll_var14_O2),
+                       update(CH4.best.model$O2,.~.-lag14_O2),
+                       update(CH4.best.model$O2,.~.-O2))
+
+piecewiseSEM::rsquared(CH4.drop.list.O2)
+
+#Model selection for N2O
+
+d<-d.train_center
+
+vifs<-readRDS("Data/VIF.5.predictors.list.RDS")
+
+m_null_N2O<-lme(lN2O~1, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Point Measurements
+m_point_all_N2O<-lme(lN2O~O2+WFPS+Temp, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_O2_N2O<-lme(lN2O~O2, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_WFPS_N2O<-lme(lN2O~WFPS, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_point_Temp_N2O<-lme(lN2O~Temp, random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Continuous Data- All Variables with VIF less than 5. 
+
+pred.all<-paste(vifs$All, sep = " ", collapse ="+")
+pred.O2<-paste(vifs$O2, sep = " ", collapse ="+")
+pred.W<-paste(vifs$WFPS, sep = " ", collapse ="+")
+pred.Temp<-paste(vifs$Temp, sep = " ", collapse ="+")
+
+
+m_O2_N2O<-lme(formula(paste("lN2O","~",pred.O2)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_Temp_N2O<-lme(formula(paste("lN2O","~",pred.Temp)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_WFPS_N2O<-lme(formula(paste("lN2O","~",pred.W)),random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+m_all_N2O<-lme(formula(paste("lN2O","~",pred.all)), random=~1|site, data=d, control = lmeControl(opt = "optim"), method = "ML", correlation = corAR1())
+
+#Stepwise Model Selection
+m_O2_N2O_step<-MASS::stepAIC(m_O2_N2O, trace = FALSE)
+m_WFPS_N2O_step<-MASS::stepAIC(m_WFPS_N2O, trace = FALSE)
+m_Temp_N2O_step<-MASS::stepAIC(m_Temp_N2O, trace = FALSE)
+m_Temp_N2O_step<-update(m_Temp_N2O_step, .~roll_var1_T + lag14_T)
+m_all_N2O_step<-MASS::stepAIC(m_all_N2O, trace = FALSE)
+
+m_N2O_best<-list(m_O2_N2O_step,m_WFPS_N2O_step,m_Temp_N2O_step,m_all_N2O_step)
+model.names<-c( "O2", "WFPS", "Temp", "All")
+names(m_N2O_best)<-model.names
+saveRDS(m_N2O_best,"best.model.list.N2O")
+saveRDS(m_all_N2O_step, "best.N2O.model")
+
+#Compare Sensor Models to Point Measurements
+anova(m_point_O2_N2O,m_O2_N2O_step,m_null_N2O)
+anova(m_Temp_N2O_step,m_point_Temp_N2O,m_null_N2O)
+anova(m_WFPS_N2O_step,m_point_WFPS_N2O,m_null_N2O)
+anova(m_point_all_N2O,m_all_N2O_step,m_null_N2O)
+anova(m_all_N2O_step,m_Temp_N2O_step)
+
+anova(m_point_O2_N2O)
+anova(m_Temp_N2O_step,m_O2_N2O_step,m_WFPS_N2O_step)
+
+N2O.model.list.O2<-list(m_null_N2O,m_O2_N2O_step,m_point_O2_N2O)
+N2O.model.list.WFPS<-list(m_null_N2O,m_WFPS_N2O_step,m_point_WFPS_N2O)
+N2O.model.list.Temp<-list(m_null_N2O,m_Temp_N2O_step,m_point_Temp_N2O)
+N2O.model.list.all<-list(m_null_N2O,m_all_N2O_step,m_point_all_N2O)
+
+N2O.models.combined.list<-list(N2O.model.list.O2,N2O.model.list.WFPS,N2O.model.list.Temp,N2O.model.list.all)
+
+piecewiseSEM::rsquared(N2O.model.list.O2)
+piecewiseSEM::rsquared(N2O.model.list.WFPS)
+piecewiseSEM::rsquared(N2O.model.list.Temp)
+piecewiseSEM::rsquared(N2O.model.list.all)
+
+# Drop terms to determine importance and contribution to variance explained
+N2O.best.model<-readRDS('best.model.list.N2O')
+
+N2O.drop.list<-list(N2O.best.model$All, 
+                    update(N2O.best.model$All,.~.-roll_var1_T),
+                    update(N2O.best.model$All,.~.-roll_var1_O2),
+                    update(N2O.best.model$All,.~.-roll_var7_T),
+                    update(N2O.best.model$All,.~.-roll_var14_T),
+                    update(N2O.best.model$All,.~.-lag14_T),
+                    update(N2O.best.model$All,.~.-lag14_O2),
+                    update(N2O.best.model$All,.~.-lag14_W),
+                    update(N2O.best.model$All,.~.-O2))
+
+piecewiseSEM::rsquared(N2O.drop.list)
+
+
+N2O.drop.list.W<-list(N2O.best.model$WFPS,
+                      update(N2O.best.model$WFPS,.~.-lag14_W),
+                      update(N2O.best.model$WFPS,.~.-roll_var3_W))
+
+piecewiseSEM::rsquared(N2O.drop.list.W)

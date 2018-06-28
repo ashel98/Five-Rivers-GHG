@@ -1,0 +1,69 @@
+#Using the origional full data set for do predictions and calculate cummulative sum
+library(nlme)
+library(tidyverse)
+
+#Load sensor data and derived predictors and measured fluxes
+d.sen_center<-readRDS("Data/5R_all_predictors_cen_all_times.RDS")%>%
+  select(-dplyr::contains("_M"))
+
+#Load the best model and update it for REML.
+CH4.model<-readRDS("best.CH4.model")
+N2O.model<-readRDS("best.N2O.model")
+
+CH4.model<-update(CH4.model,method="REML")
+N2O.model<-update(N2O.model,method="REML")
+
+#Model predicitons
+model.pred<-d.sen_center%>%
+  dplyr::select(site,dt, O2,Temp,WFPS,dplyr::contains("lag"), dplyr::contains("roll"))
+#select just the predictors from the data frame. 
+
+model.pred<-model.pred[complete.cases(model.pred),]
+
+model.pred$CH4rate.pred<-predict(CH4.model, newdata=model.pred, level=1)
+model.pred$N2Orate.pred<-predict(N2O.model, newdata=model.pred, level=1)
+
+d.model.pred<-model.pred%>%
+  dplyr::select(site,dt,CH4rate.pred,N2Orate.pred,roll_var1_O2)
+
+#Determine fluxes using linear interpolation
+require(zoo)
+d.linear.pred<-d.sen_center%>%
+  group_by(site)%>%
+  arrange(site,dt)%>%
+  do(as.data.frame(na.trim(.)))%>%
+  mutate(CH4rate.approx=na.approx(lCH4,na.rm=F),
+         N2Orate.approx=na.approx(lN2O,na.rm=F))%>%
+  dplyr::select(site,dt,CH4rate.approx,N2Orate.approx)
+
+#Build a data frame that has all the predicted values (fluxes are still logged)
+d.model.linear.all<-left_join(d.model.pred,d.linear.pred)%>%
+  mutate(CH4.diff=CH4rate.pred-CH4rate.approx,
+         N2O.diff=N2Orate.pred-N2Orate.approx)
+#Neg diff is linear was greater than model prediction
+#Postive diff is model was higher than linear
+
+d.model.linear<-d.model.linear.all[complete.cases(d.model.linear.all),] 
+
+#Compare model predictions and linear interpolation
+t.test(d.model.linear$CH4rate.pred,d.model.linear$CH4rate.approx, paired=T)
+t.test(d.model.linear$N2Orate.pred,d.model.linear$N2Orate.approx, paired=T)
+  
+sum(d.model.linear$CH4.diff>0,na.rm=T)/nrow(d.model.linear) #times when model was higher than linear
+sum(d.model.linear$N2O.diff>0,na.rm=T)/nrow(d.model.linear) #times when model was higher than linear
+
+#plot to see if 1 day variance in soil O2 and difference in fluxes
+ggplot(d.model.linear, aes(x=roll_var1_O2,y=CH4.diff))+
+  geom_point(aes(color=site))+
+  geom_smooth()
+
+#annual totals rather than events
+ d.sum<-d.model.linear%>%
+   group_by(site)%>%
+   summarise(CH4.pred=sum(CH4rate.pred),
+             CH4.linear=sum(CH4rate.approx),
+             N2O.pred=sum(N2Orate.pred),
+             N2O.linear=sum(N2Orate.approx))
+ 
+ t.test(d.sum$CH4.pred,d.sum$CH4.linear, paired=F)
+ t.test(d.sum$N2O.pred,d.sum$N2O.linear, paired=F)
